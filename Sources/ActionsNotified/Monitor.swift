@@ -381,6 +381,10 @@ final class Monitor: ObservableObject {
     }
 
     private func loadDemo() {
+        // Demo settings live in their own defaults domain, so seeding is safe.
+        if settings.watchedRepos.isEmpty {
+            settings.watchedRepos = ["acme/web", "acme/api", "acme/infra", "old-org/legacy"]
+        }
         let now = Date()
         func run(_ id: Int, _ status: String, _ conclusion: String?, title: String, branch: String,
                  event: String, workflow: String, repo: String, ago: TimeInterval) -> Run {

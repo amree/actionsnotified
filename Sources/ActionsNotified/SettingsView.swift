@@ -32,6 +32,7 @@ private struct GeneralSettings: View {
                 Toggle("Launch at login", isOn: Binding(
                     get: { launchAtLoginState.wrappedValue },
                     set: setLaunchAtLogin))
+                    .disabled(Monitor.demo)
                 Picker("Notify me when", selection: $settings.notifyMode) {
                     Text("Any run finishes").tag("all")
                     Text("A run fails").tag("failures")
@@ -52,7 +53,12 @@ private struct GeneralSettings: View {
             }
             Section {
                 LabeledContent {
-                    Button("Change…", action: chooseGh)
+                    HStack {
+                        if !settings.ghPath.isEmpty {
+                            Button("Use Default", action: resetGh)
+                        }
+                        Button("Change…", action: chooseGh)
+                    }
                 } label: {
                     Text("GitHub CLI")
                     Text(ghPathState.wrappedValue ?? "Not found")
@@ -94,6 +100,16 @@ private struct GeneralSettings: View {
         }
     }
 
+    /// Drops the custom path so gh is found on PATH again.
+    private func resetGh() {
+        settings.ghPath = ""
+        monitor.rebuildClient()
+        Task {
+            ghPathState.wrappedValue = await monitor.ghPath()
+            await monitor.poll()
+        }
+    }
+
     /// Opens the gh command log, or reveals its folder if no poll has logged yet.
     private func openLog() {
         guard let url = CommandLog.fileURL else { return }
@@ -110,33 +126,59 @@ private struct RepoSettings: View {
     @EnvironmentObject var monitor: Monitor
     private let selectionState = State(initialValue: String?.none)
     private let newRepoState = State(initialValue: "")
+    private let addingState = State(initialValue: false)
     private var newRepo: String { newRepoState.wrappedValue }
+
+    private var addForm: some View {
+        HStack {
+            TextField("Repository", text: newRepoState.projectedValue, prompt: Text("owner/repo"))
+                .labelsHidden()
+                .frame(width: 220)
+                .onSubmit(add)
+            Button("Add", action: add)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!RepoSettingsValidation.isValid(newRepo))
+        }
+        .padding(12)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Only runs you start are shown.")
                 .font(.callout).foregroundStyle(.secondary)
-            List(selection: selectionState.projectedValue) {
-                ForEach(settings.watchedRepos, id: \.self) { repo in
-                    HStack {
-                        Text(repo)
-                        if monitor.repoProblem(repo) != nil {
-                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 0) {
+                List(selection: selectionState.projectedValue) {
+                    ForEach(settings.watchedRepos, id: \.self) { repo in
+                        HStack {
+                            Text(repo)
+                            if monitor.repoProblem(repo) != nil {
+                                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                            }
+                            Spacer()
+                            detail(for: repo)
                         }
-                        Spacer()
-                        detail(for: repo)
                     }
                 }
+                .listStyle(.bordered)
+                .alternatingRowBackgrounds()
+                .onDeleteCommand(perform: remove)
+                // The standard Mac +/− pair under a list.
+                HStack(spacing: 2) {
+                    Button { addingState.wrappedValue = true } label: {
+                        Image(systemName: "plus").frame(width: 22, height: 20)
+                    }
+                    .accessibilityLabel("Add Repository")
+                    .popover(isPresented: addingState.projectedValue, arrowEdge: .bottom) { addForm }
+                    Button(action: remove) {
+                        Image(systemName: "minus").frame(width: 22, height: 20)
+                    }
+                    .accessibilityLabel("Remove Repository")
+                    .disabled(selectionState.wrappedValue == nil)
+                }
+                .buttonStyle(.borderless)
+                .padding(.top, 6)
             }
-            .listStyle(.bordered)
-            .alternatingRowBackgrounds()
-            .frame(height: 220)
-            HStack {
-                TextField("owner/repo", text: newRepoState.projectedValue)
-                    .onSubmit(add)
-                Button("Add", action: add).disabled(!RepoSettingsValidation.isValid(newRepo))
-                Button("Remove", action: remove).disabled(selectionState.wrappedValue == nil)
-            }
+            .frame(height: 250)
         }
         .padding(20)
     }
@@ -154,6 +196,7 @@ private struct RepoSettings: View {
         guard RepoSettingsValidation.isValid(repo), !settings.watchedRepos.contains(repo) else { return }
         settings.watchedRepos.append(repo)
         newRepoState.wrappedValue = ""
+        addingState.wrappedValue = false
         Task { await monitor.poll() }
     }
 

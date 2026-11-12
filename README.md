@@ -1,108 +1,69 @@
 # ActionsNotified
 
-A tiny macOS menubar app that notifies you when a GitHub Actions run **you triggered** finishes (✅ success / ❌ failure / ⚪️ cancelled).
+A macOS menu bar app that tells you when the GitHub Actions runs **you started** finish.
 
-It reuses your existing `gh` CLI login — no separate auth, no tokens to manage.
+It uses the [GitHub CLI](https://cli.github.com) you already have, so there's nothing new to sign in to and no token stored by the app.
 
-| Dropdown | Notification |
-|---|---|
-| ![ActionsNotified dropdown](screenshot.png) | ![ActionsNotified notification](screenshot-notification.png) |
+![ActionsNotified menu](screenshot.png)
 
-## Prerequisites
+## Requirements
 
-- Apple Silicon Mac, macOS 13+
-- [GitHub CLI](https://cli.github.com) installed and logged in (`gh auth status`)
-- Xcode command line tools — `xcode-select --install`
+- Apple Silicon Mac, macOS 26 or later
+- `gh` installed and signed in: `brew install gh && gh auth login`
 
-## Build & run
+## Install
+
+Download the latest `ActionsNotified-<version>.zip` from [Releases](https://github.com/amree/actionsnotified/releases), unzip it, and move `ActionsNotified.app` to `/Applications`. Releases are signed with a Developer ID and notarized by Apple.
+
+On first launch a welcome window checks for `gh`, shows the repositories you pushed to most recently, and lets you pick the ones to watch. Allow notifications when macOS asks.
+
+## Using it
+
+- **Menu bar icon:** `○` nothing running, `◌` a run in progress, red `●` a run failed (clears when you open the menu).
+- **Menu:** runs in progress with elapsed time, then recently finished runs. Filter by **All / PR / Push / Manual**. Click a run to open it on GitHub.
+- **Rerun:** hover a finished run and pick **Rerun**, or right-click it. Failed runs can rerun only the failed jobs.
+- **Notifications:** one per finished run, including reruns. Click it to open the run.
+- **Settings** (gear menu or ⌘,):
+  - *General:* launch at login, notify for every run / failures only / never, check interval, `gh` location, activity log.
+  - *Repositories:* add with **+**, remove with **−** (or Delete). A repo that can't be reached is flagged with the reason.
+
+Only runs where you are the triggering actor are shown. Dependabot, scheduled runs and other people's runs stay out.
+
+## Build from source
+
+Needs the Xcode Command Line Tools (`xcode-select --install`). There's no Xcode project; the Makefile calls `swiftc` directly.
 
 ```sh
-make run        # build + launch (recommended)
-make build      # build only
-make clean      # remove ActionsNotified.app
-```
-
-Or directly: `bash build.sh` (compiles, signs, and launches in one step).
-
-A menubar icon appears (no Dock icon). Approve the notification permission prompt on first launch.
-
-## Installing on another Mac
-
-ActionsNotified is ad-hoc signed (not notarized), so you can't distribute it via the App Store. Two options:
-
-**Option A — Build from source (cleanest)**
-
-```sh
-# On the target Mac:
-xcode-select --install          # if not already done
-brew install gh && gh auth login
 git clone git@github.com:amree/actionsnotified.git && cd actionsnotified
-make run
+make run        # build and launch
+make install    # build and copy to /Applications
+make clean
+swift test      # unit tests
 ```
 
-**Option B — Transfer the binary**
+`open ActionsNotified.app --args -demo` launches with fake runs in every state and a preview window of the menu. Demo settings are kept separate from your real ones.
 
-```sh
-# On the source Mac:
-make install                    # copies ActionsNotified.app to /Applications
+### Releasing
 
-# AirDrop /Applications/ActionsNotified.app to the target Mac, then on the target:
-xattr -dr com.apple.quarantine /Applications/ActionsNotified.app   # clear Gatekeeper flag
-open /Applications/ActionsNotified.app
-```
-
-The target Mac still needs `gh` installed and authenticated (`gh auth login`).
-
-> **No notifications?** Check System Settings → Notifications → ActionsNotified. If missing, move `ActionsNotified.app` to `/Applications` and relaunch — macOS restricts notification registration for apps outside standard paths.
-
-## Usage
-
-1. Click the menubar icon → **Settings**.
-2. Add repos to watch as `owner/repo` (e.g. `amree/myproject`).
-3. ActionsNotified polls each repo for runs you triggered. In-progress runs show in the dropdown; you get a notification when each finishes. Click a run (or its notification) to open it in the browser.
-4. Use the **All / PR / Push / Manual** filter tabs at the top of the dropdown to narrow the list by trigger type.
-5. Hover over a PR row to see the PR title as a tooltip.
-6. **Quit** from the dropdown footer.
+`make release` signs with your *Developer ID Application* certificate (hardened runtime), notarizes with an App Store Connect API key, staples the ticket and writes `ActionsNotified-<version>.zip`. Set `ASC_KEY_ID` and `ASC_ISSUER` in the environment or in an untracked `local.mk`; the key is read from `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8`. `make publish` uploads the zip as a GitHub release.
 
 ## How it works
 
-- Polls `gh run list -R <repo> -u <you> -L 100 --json ...` every 60s (configurable).
-- **Exponential backoff when idle**: if no active runs are detected, the poll interval doubles each cycle up to a 2 min cap (e.g. 60s → 120s). Opens back to the configured interval when you click the menubar icon or an active run appears.
-- Notifies on the active→completed transition, keyed by `databaseId#attempt` so reruns notify again; the first poll is a silent baseline.
-- Dependabot version-update runs (event `dynamic`) and scheduled cron runs (event `schedule`) are filtered out — GitHub's `-u` actor filter returns them even though you didn't trigger them.
-- Menubar icon: `○` idle / `◌` active / `●` red (failure stays red until you open the dropdown).
-- PR rows show branch name + workflow; push/manual rows show the run's display title + branch + workflow. Each row shows a relative time (e.g. `5m ago`) on the right.
+- Every 30 seconds by default, it calls `gh api repos/<repo>/actions/runs` for each watched repo and keeps runs whose `triggering_actor` is you. While nothing is running it backs off to every 2 minutes.
+- A notification fires when a run goes from active to completed. Runs are keyed by `id#attempt`, so a rerun notifies again. The first poll after launch only records what's already finished.
+- If a repo fails to load, its last known runs stay on screen instead of disappearing.
 
-## Command log
+## Activity log
 
-Every `gh` call is logged to `~/Library/Logs/ActionsNotified/commands.log` (last 100 kept), one line each:
+Every `gh` call is written to `~/Library/Logs/ActionsNotified/commands.log` (last 100 lines) with its duration and exit status, plus idle and skipped polls, so a gap between timestamps means a real stall. Open it from **Settings → General → Activity log**.
 
 ```
-2026-07-26 16:49:14  gh run list -R owner/repo -u you -L 100 --json …  (3.76s, exit 0)
+2026-11-12 09:51:09  gh api repos/owner/repo/actions/runs --method GET -F per_page=100  (3.90s, exit 0)
+2026-11-12 09:51:13  idle — next poll in 120s
 ```
 
-Each line records the local time, command, duration, and exit status (or `timeout`). Polls that make no `gh` call are logged too, so a gap between timestamps means a real stall — not one of these:
+## Limitations
 
-```
-2026-07-26 16:54:52  idle — next poll in 120s
-2026-07-26 16:55:10  idle — no repos watched
-2026-07-26 16:55:41  poll skipped — previous still running
-```
-
-Open the log from **Settings → Open Command Log**.
-
-## MVP limitations
-
-- **Apple Silicon only** (`-target arm64-apple-macosx13.0`). Universal binary is a future step.
-- Only runs **you triggered** (`-u <you>`) — scheduled/other-user runs are excluded by design.
-- On a very busy repo, a long run can fall out of the latest 100 before completing and be missed.
-- Single `github.com` account.
-
-## Layout
-
-```
-Sources/ActionsNotified/   Swift sources (App, Monitor, GitHubClient, views, models)
-Resources/       Info.plist
-Makefile         build / run / clean / install targets
-build.sh         compile → bundle → sign → launch (single script alternative)
-```
+- Apple Silicon only.
+- One `github.com` account (whichever `gh` is signed in to).
+- Only the latest 100 runs per repo are checked, so on a very busy repo a long run can be missed.

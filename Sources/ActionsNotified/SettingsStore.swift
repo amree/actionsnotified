@@ -3,7 +3,10 @@ import Combine
 
 /// User-facing settings + small persisted state, backed by UserDefaults.
 final class SettingsStore: ObservableObject {
-    private let defaults = UserDefaults.standard
+    /// `-demo` keeps its fake repos and settings in a separate domain so a demo
+    /// session never overwrites the real ones.
+    private let defaults = ProcessInfo.processInfo.arguments.contains("-demo")
+        ? UserDefaults(suiteName: "com.amree.actionsnotified.demo")! : .standard
 
     @Published var watchedRepos: [String] {
         didSet { defaults.set(watchedRepos, forKey: Keys.repos) }
