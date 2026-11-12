@@ -4,7 +4,7 @@ A macOS menu bar app that tells you when the GitHub Actions runs **you started**
 
 It uses the [GitHub CLI](https://cli.github.com) you already have, so there's nothing new to sign in to and no token stored by the app.
 
-<img src="screenshot.png" alt="ActionsNotified menu" width="420">
+<img src="screenshot.png" alt="ActionsNotified menu" width="552">
 
 ## Requirements
 
