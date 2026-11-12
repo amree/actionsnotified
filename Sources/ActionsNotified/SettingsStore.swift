@@ -43,6 +43,12 @@ final class SettingsStore: ObservableObject {
     }
 
     init() {
+        // One-time carry-over of settings from the app's old name (Gheen).
+        let id = "com.amree.actionsnotified"
+        if Bundle.main.bundleIdentifier == id, defaults.persistentDomain(forName: id) == nil,
+           let old = defaults.persistentDomain(forName: "com.amree.gheen") {
+            defaults.setPersistentDomain(old, forName: id)
+        }
         watchedRepos = defaults.stringArray(forKey: Keys.repos) ?? []
         let stored = defaults.double(forKey: Keys.interval)
         pollInterval = stored > 0 ? stored : 30

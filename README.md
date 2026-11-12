@@ -1,4 +1,4 @@
-# Gheen
+# ActionsNotified
 
 A tiny macOS menubar app that notifies you when a GitHub Actions run **you triggered** finishes (✅ success / ❌ failure / ⚪️ cancelled).
 
@@ -6,7 +6,7 @@ It reuses your existing `gh` CLI login — no separate auth, no tokens to manage
 
 | Dropdown | Notification |
 |---|---|
-| ![Gheen dropdown](screenshot.png) | ![Gheen notification](screenshot-notification.png) |
+| ![ActionsNotified dropdown](screenshot.png) | ![ActionsNotified notification](screenshot-notification.png) |
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@ It reuses your existing `gh` CLI login — no separate auth, no tokens to manage
 ```sh
 make run        # build + launch (recommended)
 make build      # build only
-make clean      # remove Gheen.app
+make clean      # remove ActionsNotified.app
 ```
 
 Or directly: `bash build.sh` (compiles, signs, and launches in one step).
@@ -28,7 +28,7 @@ A menubar icon appears (no Dock icon). Approve the notification permission promp
 
 ## Installing on another Mac
 
-Gheen is ad-hoc signed (not notarized), so you can't distribute it via the App Store. Two options:
+ActionsNotified is ad-hoc signed (not notarized), so you can't distribute it via the App Store. Two options:
 
 **Option A — Build from source (cleanest)**
 
@@ -44,22 +44,22 @@ make run
 
 ```sh
 # On the source Mac:
-make install                    # copies Gheen.app to /Applications
+make install                    # copies ActionsNotified.app to /Applications
 
-# AirDrop /Applications/Gheen.app to the target Mac, then on the target:
-xattr -dr com.apple.quarantine /Applications/Gheen.app   # clear Gatekeeper flag
-open /Applications/Gheen.app
+# AirDrop /Applications/ActionsNotified.app to the target Mac, then on the target:
+xattr -dr com.apple.quarantine /Applications/ActionsNotified.app   # clear Gatekeeper flag
+open /Applications/ActionsNotified.app
 ```
 
 The target Mac still needs `gh` installed and authenticated (`gh auth login`).
 
-> **No notifications?** Check System Settings → Notifications → Gheen. If missing, move `Gheen.app` to `/Applications` and relaunch — macOS restricts notification registration for apps outside standard paths.
+> **No notifications?** Check System Settings → Notifications → ActionsNotified. If missing, move `ActionsNotified.app` to `/Applications` and relaunch — macOS restricts notification registration for apps outside standard paths.
 
 ## Usage
 
 1. Click the menubar icon → **Settings**.
 2. Add repos to watch as `owner/repo` (e.g. `amree/myproject`).
-3. Gheen polls each repo for runs you triggered. In-progress runs show in the dropdown; you get a notification when each finishes. Click a run (or its notification) to open it in the browser.
+3. ActionsNotified polls each repo for runs you triggered. In-progress runs show in the dropdown; you get a notification when each finishes. Click a run (or its notification) to open it in the browser.
 4. Use the **All / PR / Push / Manual** filter tabs at the top of the dropdown to narrow the list by trigger type.
 5. Hover over a PR row to see the PR title as a tooltip.
 6. **Quit** from the dropdown footer.
@@ -75,7 +75,7 @@ The target Mac still needs `gh` installed and authenticated (`gh auth login`).
 
 ## Command log
 
-Every `gh` call is logged to `~/Library/Logs/Gheen/commands.log` (last 100 kept), one line each:
+Every `gh` call is logged to `~/Library/Logs/ActionsNotified/commands.log` (last 100 kept), one line each:
 
 ```
 2026-07-26 16:49:14  gh run list -R owner/repo -u you -L 100 --json …  (3.76s, exit 0)
@@ -101,7 +101,7 @@ Open the log from **Settings → Open Command Log**.
 ## Layout
 
 ```
-Sources/Gheen/   Swift sources (App, Monitor, GitHubClient, views, models)
+Sources/ActionsNotified/   Swift sources (App, Monitor, GitHubClient, views, models)
 Resources/       Info.plist
 Makefile         build / run / clean / install targets
 build.sh         compile → bundle → sign → launch (single script alternative)

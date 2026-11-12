@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Gheen</string>
+    <string>ActionsNotified</string>
     <key>CFBundleDisplayName</key>
-    <string>Gheen</string>
+    <string>ActionsNotified</string>
     <key>CFBundleIdentifier</key>
-    <string>com.amree.gheen</string>
+    <string>com.amree.actionsnotified</string>
     <key>CFBundleExecutable</key>
-    <string>Gheen</string>
+    <string>ActionsNotified</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

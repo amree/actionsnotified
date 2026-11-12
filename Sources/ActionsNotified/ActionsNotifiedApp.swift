@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct GheenApp: App {
+struct ActionsNotifiedApp: App {
     @StateObject private var settings: SettingsStore
     @StateObject private var monitor: Monitor
 
@@ -51,7 +51,7 @@ struct GheenApp: App {
         .defaultLaunchBehavior(Monitor.demo ? .presented : .suppressed)
 
         // First run: opens at launch while nothing is watched.
-        Window("Welcome to Gheen", id: "welcome") {
+        Window("Welcome to ActionsNotified", id: "welcome") {
             OnboardingView()
                 .environmentObject(settings)
                 .environmentObject(monitor)

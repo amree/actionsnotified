@@ -18,15 +18,7 @@ struct MenuContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            Picker("Filter by event", selection: filterEventState.projectedValue) {
-                Text("All").tag("")
-                Text("PR").tag("PR")
-                Text("Push").tag("Push")
-                Text("Manual").tag("Manual")
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: .infinity)
+            FilterControl(selection: filterEventState.projectedValue)
 
             if let banner = bannerText {
                 HStack(spacing: 8) {
@@ -60,7 +52,7 @@ struct MenuContentView: View {
     private var header: some View {
         HStack(spacing: 6) {
             Image(systemName: "smallcircle.filled.circle")
-            Text("Gheen").font(.headline)
+            Text("ActionsNotified").font(.headline)
             if let login = monitor.login {
                 Text("@\(login)").font(.callout).foregroundStyle(.secondary)
             }
@@ -69,7 +61,7 @@ struct MenuContentView: View {
                 Button("Settings…") { showSettings(tab: "general") }
                     .keyboardShortcut(",")
                 Divider()
-                Button("Quit Gheen") { NSApplication.shared.terminate(nil) }
+                Button("Quit ActionsNotified") { NSApplication.shared.terminate(nil) }
                     .keyboardShortcut("q")
             } label: {
                 Image(systemName: "gearshape")
@@ -290,5 +282,36 @@ private struct RunRow: View {
         return t >= 3600
             ? String(format: "%d:%02d:%02d", t / 3600, t / 60 % 60, t % 60)
             : String(format: "%d:%02d", t / 60, t % 60)
+    }
+}
+
+/// Full-width segmented filter. SwiftUI's `.segmented` Picker on macOS keeps
+/// its natural width and ignores `.frame(maxWidth: .infinity)`, so use
+/// NSSegmentedControl with equal, stretching segments.
+private struct FilterControl: NSViewRepresentable {
+    @Binding var selection: String
+    private static let items = [("All", ""), ("PR", "PR"), ("Push", "Push"), ("Manual", "Manual")]
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let c = NSSegmentedControl(labels: Self.items.map(\.0), trackingMode: .selectOne,
+                                   target: context.coordinator, action: #selector(Coordinator.changed(_:)))
+        c.segmentDistribution = .fillEqually
+        c.selectedSegmentBezelColor = .quaternaryLabelColor // grey pill, like SwiftUI's Picker
+        c.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        c.setAccessibilityLabel("Filter by event")
+        return c
+    }
+
+    func updateNSView(_ c: NSSegmentedControl, context: Context) {
+        context.coordinator.selection = $selection
+        c.selectedSegment = Self.items.firstIndex { $0.1 == selection } ?? 0
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
+
+    final class Coordinator: NSObject {
+        var selection: Binding<String>
+        init(selection: Binding<String>) { self.selection = selection }
+        @objc func changed(_ c: NSSegmentedControl) { selection.wrappedValue = FilterControl.items[c.selectedSegment].1 }
     }
 }

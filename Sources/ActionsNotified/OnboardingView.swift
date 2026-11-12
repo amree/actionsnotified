@@ -24,7 +24,7 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 4) {
             VStack(alignment: .leading, spacing: 6) {
                 Image(systemName: "smallcircle.filled.circle").font(.largeTitle)
-                Text("Welcome to Gheen").font(.title2).bold()
+                Text("Welcome to ActionsNotified").font(.title2).bold()
                 Text("Watch your GitHub Actions runs. Uses the GitHub CLI you already have. Nothing new to sign in to.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

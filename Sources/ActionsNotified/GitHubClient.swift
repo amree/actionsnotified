@@ -141,7 +141,7 @@ actor GitHubClient {
     /// `terminationHandler` (non-blocking) with its own hard deadline, so a lost
     /// reap notification can't block a thread or hang this call forever.
     /// Returns nil only if the process fails to launch.
-    /// Internal (not private) so GheenTests can exercise it directly.
+    /// Internal (not private) so ActionsNotifiedTests can exercise it directly.
     func runProcess(_ executable: String, _ arguments: [String],
                      environment: [String: String]? = nil,
                      timeout: TimeInterval)

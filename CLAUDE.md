@@ -1,4 +1,4 @@
-# Gheen — Claude Code context
+# ActionsNotified — Claude Code context
 
 ## What this is
 macOS menubar app (Apple Silicon, macOS 26+). Polls GitHub Actions runs triggered by the current `gh` user across watched repos. Notifies on completion. No auth code — delegates entirely to the `gh` CLI.
@@ -10,7 +10,7 @@ make build    # build only
 make install  # build + copy to /Applications
 bash build.sh # legacy single-script alternative (builds + launches)
 ```
-Produces `Gheen.app/` (excluded from git), ad-hoc signed. Requires `swiftc` + `codesign` (Xcode CLI tools) and `gh` authenticated.
+Produces `ActionsNotified.app/` (excluded from git), ad-hoc signed. Requires `swiftc` + `codesign` (Xcode CLI tools) and `gh` authenticated.
 
 ## Language / stack
 - Swift 5 language mode (`-swift-version 5`), `-target arm64-apple-macosx26.0`
@@ -20,19 +20,19 @@ Produces `Gheen.app/` (excluded from git), ad-hoc signed. Requires `swiftc` + `c
 
 ## File layout
 ```
-Sources/Gheen/
-  GheenApp.swift          @main App, MenuBarExtra, boots Monitor + NotificationManager
+Sources/ActionsNotified/
+  ActionsNotifiedApp.swift          @main App, MenuBarExtra, boots Monitor + NotificationManager
   Models.swift            Run: Codable, runKey = "databaseId#attempt", eventLabel, isPR, repoName, timeAgo
   GitHubClient.swift      actor; resolves gh path once; Process arg-array (no shell)
   Monitor.swift           @MainActor ObservableObject; poll loop, diff, notification emit, exponential backoff
   NotificationManager.swift  UNUserNotificationCenter delegate; click → NSWorkspace.open
   SettingsStore.swift     UserDefaults: repos, interval, ghPath, notifiedKeys
-  CommandLog.swift        rolling ~/Library/Logs/Gheen/commands.log (last 100); serial-queue writer shared by GitHubClient + Monitor
+  CommandLog.swift        rolling ~/Library/Logs/ActionsNotified/commands.log (last 100); serial-queue writer shared by GitHubClient + Monitor
   MenuContentView.swift   popover UI (header + gear menu, filter tabs, error banner, Running / Finished rows with hover Rerun)
   SettingsView.swift      Settings scene: General (launch at login, notify mode, interval, gh path, activity log) + Repositories tabs
   OnboardingView.swift    first-run Window scene: gh / sign-in checks, pick recently pushed repos
 Resources/
-  Info.plist              CFBundleIdentifier=com.amree.gheen, LSUIElement=true
+  Info.plist              CFBundleIdentifier=com.amree.actionsnotified, LSUIElement=true
 Makefile                  build / run / clean / install targets
 ```
 
@@ -56,7 +56,7 @@ Makefile                  build / run / clean / install targets
 - **Notifications**: title = conclusion emoji + run display title; body = repo · branch · workflow
 - **Actor filtering**: `listRuns` calls `gh api repos/{repo}/actions/runs` (not `gh run list` — its `--json` has no actor field at all), **without** the `actor=<login>` query param, then keeps only runs where `triggering_actor.login == login` client-side. `actor=` looks like a natural server-side pre-filter but is backed by an eventually-consistent search index: confirmed by repeated identical calls with `actor=` returning a page of months-old runs on one call and the correct recent page on the next two — the unfiltered endpoint was stable across the same repeated-call test. `triggering_actor` filtering also subsumes what `actor=` would have leaked anyway: Dependabot version updates, scheduled cron runs, and a `workflow_dispatch` run someone else triggered on a branch whose HEAD commit the user happens to have authored
 - **Per-repo reconciliation**: `Monitor.reconcile(fresh:lastKnown:)` is the single place deciding what a poll displays for a repo. A hard `gh api` failure (`fresh == nil`) carries the repo's entire last-known run list forward — otherwise the failing repo drops out of the capped 10-item "recently finished" list and another repo's older runs crowd in. A successful-but-incomplete response (GitHub's `actor=` filter is backed by a search index that can lag a poll behind real state and silently omit a still-active run) carries forward only the still-missing *active* runs — a finished run rolling off a real page is expected, not a gap to paper over. Each carry-forward is logged (repo, run keys, reason) so a flapping run is diagnosable from `commands.log` instead of looking like silent data loss
-- **Command log**: `CommandLog` writes to `~/Library/Logs/Gheen/commands.log` (last 100, serial queue), opened from Settings. Records every `gh` call (with duration + exit status, and the stderr reason folded in on failure or `timeout`), plus no-gh-call events: `monitor started`, idle backoff, no repos, skipped tick, `poll watchdog — abandoning stuck poll`, `carried forward N run(s) for <repo>`, and `error:` lines. Gap between timestamps = real stall
+- **Command log**: `CommandLog` writes to `~/Library/Logs/ActionsNotified/commands.log` (last 100, serial queue), opened from Settings. Records every `gh` call (with duration + exit status, and the stderr reason folded in on failure or `timeout`), plus no-gh-call events: `monitor started`, idle backoff, no repos, skipped tick, `poll watchdog — abandoning stuck poll`, `carried forward N run(s) for <repo>`, and `error:` lines. Gap between timestamps = real stall
 - Menubar icons: `circle` idle, `circle.dotted` active, `circle.fill` red on unacked failure
 
 ## What NOT to do

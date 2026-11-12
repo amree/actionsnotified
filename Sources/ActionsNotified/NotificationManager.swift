@@ -24,7 +24,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         let request = UNNotificationRequest(
             identifier: UUID().uuidString, content: content, trigger: nil)
         center.add(request) { error in
-            if let error { print("[Gheen] Notification error: \(error.localizedDescription)") }
+            if let error { print("[ActionsNotified] Notification error: \(error.localizedDescription)") }
         }
     }
 

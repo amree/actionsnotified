@@ -3,17 +3,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "Gheen",
+    name: "ActionsNotified",
     platforms: [.macOS("26.0")],
     targets: [
         .executableTarget(
-            name: "Gheen",
-            path: "Sources/Gheen"
+            name: "ActionsNotified",
+            path: "Sources/ActionsNotified"
         ),
         .testTarget(
-            name: "GheenTests",
-            dependencies: ["Gheen"],
-            path: "Tests/GheenTests"
+            name: "ActionsNotifiedTests",
+            dependencies: ["ActionsNotified"],
+            path: "Tests/ActionsNotifiedTests"
         )
     ]
 )

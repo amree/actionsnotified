@@ -1,5 +1,5 @@
 import XCTest
-@testable import Gheen
+@testable import ActionsNotified
 
 /// Regression test for the poll-wedging bug: `runProcess` used to reap via a
 /// blocking `Task.detached { proc.waitUntilExit() }`. In production that call

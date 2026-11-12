@@ -1,5 +1,5 @@
 import XCTest
-@testable import Gheen
+@testable import ActionsNotified
 
 /// Regression test for the leaked-run bug: GitHub's `actor=` query filter is a
 /// coarse pre-filter, not an exact match — it returns runs someone else

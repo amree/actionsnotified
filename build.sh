@@ -2,11 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP="Gheen.app"
+APP="ActionsNotified.app"
 CONTENTS="$APP/Contents"
 BIN_DIR="$CONTENTS/MacOS"
 RES_DIR="$CONTENTS/Resources"
-BIN="$BIN_DIR/Gheen"
+BIN="$BIN_DIR/ActionsNotified"
 
 echo "==> Cleaning"
 rm -rf "$APP"
@@ -25,7 +25,7 @@ swiftc \
     -framework AppKit \
     -framework UserNotifications \
     -o "$BIN" \
-    Sources/Gheen/*.swift
+    Sources/ActionsNotified/*.swift
 
 echo "==> Bundling Info.plist"
 cp Resources/Info.plist "$CONTENTS/Info.plist"

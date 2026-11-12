@@ -1,7 +1,7 @@
 .PHONY: build run clean install
 
-APP     = Gheen.app
-SOURCES = $(wildcard Sources/Gheen/*.swift)
+APP     = ActionsNotified.app
+SOURCES = $(wildcard Sources/ActionsNotified/*.swift)
 
 build: $(APP)
 
@@ -16,7 +16,7 @@ $(APP): $(SOURCES) Resources/Info.plist Resources/AppIcon.icns
 		-framework SwiftUI \
 		-framework AppKit \
 		-framework UserNotifications \
-		-o $(APP)/Contents/MacOS/Gheen \
+		-o $(APP)/Contents/MacOS/ActionsNotified \
 		$(SOURCES)
 	@echo "==> Bundling Info.plist and icons"
 	@cp Resources/Info.plist $(APP)/Contents/Info.plist
@@ -42,7 +42,7 @@ install:
 		-framework SwiftUI \
 		-framework AppKit \
 		-framework UserNotifications \
-		-o $(APP)/Contents/MacOS/Gheen \
+		-o $(APP)/Contents/MacOS/ActionsNotified \
 		$(SOURCES)
 	@echo "==> Bundling Info.plist and icons"
 	@cp Resources/Info.plist $(APP)/Contents/Info.plist

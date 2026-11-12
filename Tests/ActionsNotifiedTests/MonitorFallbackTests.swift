@@ -1,5 +1,5 @@
 import XCTest
-@testable import Gheen
+@testable import ActionsNotified
 
 /// Regression tests for two flavors of the same bug: a poll that can't fully
 /// account for a repo must not regress what's displayed for it.

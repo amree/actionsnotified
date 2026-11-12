@@ -94,7 +94,7 @@ final class Monitor: ObservableObject {
 
     // MARK: - Lifecycle
 
-    /// `open Gheen.app --args -demo`: fake runs in every state, no polling, and a
+    /// `open ActionsNotified.app --args -demo`: fake runs in every state, no polling, and a
     /// preview window with the popover content. For UI checks only.
     static let demo = ProcessInfo.processInfo.arguments.contains("-demo")
 
@@ -456,7 +456,7 @@ final class Monitor: ObservableObject {
     /// expected and correct, not a gap to paper over.
     ///
     /// Pure and MainActor-free so it's directly unit-testable. Internal (not
-    /// private) for GheenTests. Returns the carried-over runs alongside the
+    /// private) for ActionsNotifiedTests. Returns the carried-over runs alongside the
     /// result so the caller can log when this kicks in.
     nonisolated static func reconcile(fresh: [Run]?, lastKnown: [Run]) -> (runs: [Run], carriedOver: [Run]) {
         guard let fresh else { return (lastKnown, lastKnown) }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Rolling log at ~/Library/Logs/Gheen/commands.log (last 100 lines). Records every
+/// Rolling log at ~/Library/Logs/ActionsNotified/commands.log (last 100 lines). Records every
 /// `gh` call plus poll-loop events that make no `gh` call, so a gap between timestamps
 /// means a real stall — not idle backoff, an empty repo list, or a skipped tick.
 ///
@@ -9,9 +9,9 @@ import Foundation
 enum CommandLog {
     static let fileURL: URL? = FileManager.default
         .urls(for: .libraryDirectory, in: .userDomainMask).first?
-        .appendingPathComponent("Logs/Gheen/commands.log")
+        .appendingPathComponent("Logs/ActionsNotified/commands.log")
 
-    private static let queue = DispatchQueue(label: "com.amree.gheen.commandlog")
+    private static let queue = DispatchQueue(label: "com.amree.actionsnotified.commandlog")
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH:mm:ss"
