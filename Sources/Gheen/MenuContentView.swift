@@ -4,26 +4,52 @@ import AppKit
 struct MenuContentView: View {
     @EnvironmentObject var monitor: Monitor
     @EnvironmentObject var settings: SettingsStore
+    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     // Explicit State storage, not `@State`: on the macOS 27 SDK `@State` is a
     // macro whose SwiftUIMacros plugin ships only with full Xcode, so it fails
     // to compile with just the Command Line Tools.
-    private let showSettingsState = State(initialValue: false)
     private let filterEventState = State(initialValue: "")
-    private var showSettings: Bool {
-        get { showSettingsState.wrappedValue }
-        nonmutating set { showSettingsState.wrappedValue = newValue }
-    }
     private var filterEvent: String { filterEventState.wrappedValue }
 
+    private static let rowHeight: CGFloat = 44
+    private static let headerHeight: CGFloat = 24
+
     var body: some View {
-        Group {
-            if showSettings {
-                SettingsView(onClose: { showSettings = false })
-            } else {
-                mainView
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            Picker("Filter by event", selection: filterEventState.projectedValue) {
+                Text("All").tag("")
+                Text("PR").tag("PR")
+                Text("Push").tag("Push")
+                Text("Manual").tag("Manual")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: .infinity)
+
+            if let banner = bannerText {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text(banner).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                    if monitor.errorBanner == nil {
+                        Button("Fix") { showSettings(tab: "repos") }
+                    }
+                }
+                .font(.callout)
+                .foregroundStyle(.orange)
+                .padding(.vertical, 6).padding(.horizontal, 10)
+                .background(.orange.opacity(0.12), in: .rect(cornerRadius: 10))
+            }
+
+            runList
+
+            if let t = monitor.lastPolledAt {
+                Text("Updated \(t, style: .relative) ago")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(12)
+        .padding(14)
         .frame(width: 360)
         .onAppear {
             monitor.acknowledge()
@@ -31,71 +57,77 @@ struct MenuContentView: View {
         }
     }
 
-    private var mainView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Gheen").font(.headline)
-                Spacer()
-                Picker("", selection: filterEventState.projectedValue) {
-                    Text("All").tag("")
-                    Text("PR").tag("PR")
-                    Text("Push").tag("Push")
-                    Text("Manual").tag("Manual")
-                }
-                .pickerStyle(.segmented)
+    private var header: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "smallcircle.filled.circle")
+            Text("Gheen").font(.headline)
+            if let login = monitor.login {
+                Text("@\(login)").font(.callout).foregroundStyle(.secondary)
             }
-
-            if let banner = monitor.errorBanner {
-                Label(banner, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Menu {
+                Button("Settings…") { showSettings(tab: "general") }
+                    .keyboardShortcut(",")
+                Divider()
+                Button("Quit Gheen") { NSApplication.shared.terminate(nil) }
+                    .keyboardShortcut("q")
+            } label: {
+                Image(systemName: "gearshape")
             }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
-                if settings.watchedRepos.isEmpty {
-                    Text("Add a repo in Settings to start watching.")
-                        .font(.callout).foregroundStyle(.secondary)
-                        .padding(.vertical, 4)
-                } else if filteredActive.isEmpty && filteredRecent.isEmpty {
-                    Text(filterEvent.isEmpty ? "No runs you triggered yet." : "No \(filterEvent) runs.")
-                        .font(.callout).foregroundStyle(.secondary).padding(.vertical, 4)
-                } else {
-                    // Fixed-height scroll region: a bare ScrollView has no intrinsic
-                    // height and collapses in the auto-sizing MenuBarExtra window, and
-                    // measuring content to size it creates a layout feedback loop. A
-                    // fixed height is predictable — scrolls when long, some blank space
-                    // when short.
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if !filteredActive.isEmpty {
-                                section("In progress", runs: filteredActive)
-                            }
-                            if !filteredRecent.isEmpty {
-                                section("Recently finished", runs: filteredRecent)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(height: 420)
-                }
-            }
-
-            Divider()
-
-            HStack {
-                Button("Settings") { showSettings = true }
-                if let t = monitor.lastPolledAt {
-                    Text("· Updated \(timeAgo(t))")
-                        .foregroundStyle(.tertiary)
-                }
-                Spacer()
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-            }
+            .menuIndicator(.hidden)
+            .menuStyle(.button)
             .buttonStyle(.borderless)
+            .fixedSize()
+            .accessibilityLabel("Settings and Quit")
         }
+    }
+
+    /// One banner slot for every error. Global errors (gh missing, signed out,
+    /// rerun failed) win over per-repo fetch failures.
+    private var bannerText: String? {
+        if let e = monitor.errorBanner { return e }
+        let failing = monitor.repoErrors.keys.sorted()
+        switch failing.count {
+        case 0:  return nil
+        case 1:  return "\(failing[0]): \(monitor.repoProblem(failing[0]) ?? "can't be reached")"
+        default: return "\(failing.count) repositories can't be reached"
+        }
+    }
+
+    @ViewBuilder private var runList: some View {
+        if settings.watchedRepos.isEmpty {
+            ContentUnavailableView {
+                Label("No repositories watched", systemImage: "eye.slash")
+            } actions: {
+                Button("Choose Repositories…") { showWindow("welcome") }
+            }
+            .frame(height: 180)
+        } else if filteredActive.isEmpty && filteredRecent.isEmpty {
+            ContentUnavailableView(
+                filterEvent.isEmpty ? "No runs yet" : "No \(filterEvent) runs",
+                systemImage: "circle.dotted",
+                description: Text("Runs you start in \(repoList) appear here shortly after they begin."))
+            .frame(height: 180)
+        } else {
+            // Height = what the rows need, capped. A bare ScrollView has no
+            // intrinsic height in the auto-sizing MenuBarExtra window, and
+            // measuring content to size it loops — so compute it.
+            let sections = (filteredActive.isEmpty ? 0 : 1) + (filteredRecent.isEmpty ? 0 : 1)
+            let rows = filteredActive.count + filteredRecent.count
+            let height = min(CGFloat(rows) * Self.rowHeight + CGFloat(sections) * Self.headerHeight, 420)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    if !filteredActive.isEmpty { section("Running", runs: filteredActive) }
+                    if !filteredRecent.isEmpty { section("Finished", runs: filteredRecent) }
+                }
+            }
+            .frame(height: height)
+        }
+    }
+
+    private var repoList: String {
+        let names = settings.watchedRepos
+        return names.count <= 2 ? names.joined(separator: " and ") : "your \(names.count) repositories"
     }
 
     private var filteredActive: [Run] {
@@ -108,73 +140,155 @@ struct MenuContentView: View {
             : monitor.recentRuns.filter { $0.eventLabel == filterEvent }
     }
 
-    private func timeAgo(_ date: Date) -> String {
-        let s = Date().timeIntervalSince(date)
-        if s < 60    { return "just now" }
-        if s < 3600  { return "\(Int(s / 60))m ago" }
-        if s < 86400 { return "\(Int(s / 3600))h ago" }
-        return "\(Int(s / 86400))d ago"
-    }
-
     private func section(_ title: String, runs: [Run]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased())
-                .font(.caption2).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
+                .frame(height: Self.headerHeight, alignment: .bottomLeading)
+                .padding(.horizontal, 8)
             ForEach(runs) { run in
-                RunRow(run: run)
+                RunRow(run: run).frame(height: Self.rowHeight)
             }
         }
+    }
+
+    private func showSettings(tab: String) {
+        settings.settingsTab = tab
+        openSettings()
+        bringToFront { $0.identifier?.rawValue.contains("Settings") == true }
+    }
+
+    private func showWindow(_ id: String) {
+        openWindow(id: id)
+        bringToFront { $0.identifier?.rawValue == id }
     }
 }
 
 private struct RunRow: View {
     let run: Run
     @EnvironmentObject var monitor: Monitor
+    private let hoverState = State(initialValue: false)
+    private var hovering: Bool { hoverState.wrappedValue }
 
-    private var dotColor: Color {
-        if run.isActive { return .yellow }
-        switch run.conclusion {
-        case "success":                                  return .green
-        case "failure", "timed_out", "startup_failure": return .red
-        default:                                         return .secondary
+    var body: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 10) {
+            statusIcon.frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(run.isPR ? run.headBranch : run.displayTitle)
+                    .fontWeight(run.isActive ? .semibold : .medium)
+                    .lineLimit(1).truncationMode(.middle)
+                subtitle
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 4)
+            }
+            .contentShape(.rect)
+            .onTapGesture(perform: open)
+            // Rerun menu is a sibling of the tappable area, not inside it —
+            // a Menu nested in a tap target never gets the click.
+            if hovering && run.isCompleted {
+                rerunMenu
+            }
+            trailing.onTapGesture(perform: open)
+        }
+        .padding(.horizontal, 8)
+        .frame(maxHeight: .infinity)
+        .background(hovering ? Color.primary.opacity(0.07) : .clear, in: .rect(cornerRadius: 10))
+        .onHover { hoverState.wrappedValue = $0 }
+        .help(run.isPR ? run.displayTitle : "")
+        .contextMenu {
+            Button("Open in Browser", action: open)
+            if run.isCompleted {
+                Divider()
+                rerunButtons
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Open in Browser", open)
+        .accessibilityAction(named: "Rerun Failed Jobs") {
+            if run.isFailure { monitor.rerun(run, failedOnly: true) }
+        }
+        .accessibilityAction(named: "Rerun All Jobs") {
+            if run.isCompleted { monitor.rerun(run) }
         }
     }
 
-    var body: some View {
-        Button {
-            if let url = URL(string: run.url) { NSWorkspace.shared.open(url) }
-        } label: {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: run.isActive ? "circle.dotted" : "circle.fill")
-                    .foregroundStyle(dotColor)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(run.isPR ? run.headBranch : run.displayTitle)
-                        .font(.callout).fontWeight(.medium)
-                    Text(run.isPR
-                        ? "\(run.repoName) · \(run.workflowName)"
-                        : "\(run.repoName) · \(run.headBranch) · \(run.workflowName)")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .lineLimit(1).truncationMode(.middle)
-                }
-                Spacer()
-                Text(run.timeAgo)
-                    .font(.caption2).foregroundStyle(.tertiary)
-            }
-            .contentShape(Rectangle())
+    private var rerunMenu: some View {
+        Menu("Rerun") { rerunButtons }
+            .menuStyle(.button)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .fixedSize()
+    }
+
+    @ViewBuilder private var rerunButtons: some View {
+        if run.isFailure {
+            Button("Rerun Failed Jobs") { monitor.rerun(run, failedOnly: true) }
         }
-        .buttonStyle(.plain)
-        .help(run.isPR ? run.displayTitle : "")
-        .contextMenu {
-            if run.isCompleted {
-                Button("Open in Browser") {
-                    if let url = URL(string: run.url) { NSWorkspace.shared.open(url) }
-                }
-                Divider()
-                if run.isFailure {
-                    Button("Rerun Failed Jobs") { monitor.rerun(run, failedOnly: true) }
-                }
-                Button("Rerun All Jobs") { monitor.rerun(run) }
+        Button("Rerun All Jobs") { monitor.rerun(run) }
+    }
+
+    @ViewBuilder private var statusIcon: some View {
+        if run.isActive {
+            if run.isWaiting {
+                Image(systemName: "circle.dashed").foregroundStyle(.secondary)
+                    .accessibilityLabel("Waiting")
+            } else {
+                ProgressView().controlSize(.small).scaleEffect(0.8)
+                    .accessibilityLabel("Running")
+            }
+        } else {
+            switch run.conclusion {
+            case "success":
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    .accessibilityLabel("Succeeded")
+            case "failure", "timed_out", "startup_failure":
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                    .accessibilityLabel("Failed")
+            default:
+                Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+                    .accessibilityLabel(run.conclusion?.capitalized ?? "Finished")
             }
         }
+    }
+
+    private var subtitle: Text {
+        let rest = run.isPR
+            ? "\(run.repoName) · \(run.workflowName)"
+            : "\(run.repoName) · \(run.headBranch) · \(run.workflowName)"
+        if run.isFailure {
+            return Text("\(Text("Failed").foregroundStyle(.red).fontWeight(.semibold)) · \(rest)")
+        }
+        if run.status == "waiting" { return Text("Waiting for approval · \(rest)") }
+        if run.conclusion == "cancelled" { return Text("Cancelled · \(rest)") }
+        return Text(rest)
+    }
+
+    @ViewBuilder private var trailing: some View {
+        if run.isActive {
+            // Elapsed time of the current attempt; run_started_at resets on rerun.
+            let start = run.runStartedAt ?? run.createdAt
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                Text(Self.elapsed(ctx.date.timeIntervalSince(start)))
+                    .font(.callout).monospacedDigit().foregroundStyle(.secondary)
+            }
+        } else {
+            Text(run.timeAgo.replacingOccurrences(of: " ago", with: ""))
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func open() {
+        if let url = URL(string: run.url) { NSWorkspace.shared.open(url) }
+    }
+
+    static func elapsed(_ s: TimeInterval) -> String {
+        let t = max(0, Int(s))
+        return t >= 3600
+            ? String(format: "%d:%02d:%02d", t / 3600, t / 60 % 60, t % 60)
+            : String(format: "%d:%02d", t / 60, t % 60)
     }
 }

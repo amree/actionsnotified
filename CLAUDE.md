@@ -1,7 +1,7 @@
 # Gheen — Claude Code context
 
 ## What this is
-macOS menubar app (Apple Silicon, macOS 13+). Polls GitHub Actions runs triggered by the current `gh` user across watched repos. Notifies on completion. No auth code — delegates entirely to the `gh` CLI.
+macOS menubar app (Apple Silicon, macOS 26+). Polls GitHub Actions runs triggered by the current `gh` user across watched repos. Notifies on completion. No auth code — delegates entirely to the `gh` CLI.
 
 ## Build
 ```sh
@@ -13,7 +13,7 @@ bash build.sh # legacy single-script alternative (builds + launches)
 Produces `Gheen.app/` (excluded from git), ad-hoc signed. Requires `swiftc` + `codesign` (Xcode CLI tools) and `gh` authenticated.
 
 ## Language / stack
-- Swift 5 language mode (`-swift-version 5`), `-target arm64-apple-macosx13.0`
+- Swift 5 language mode (`-swift-version 5`), `-target arm64-apple-macosx26.0`
 - SwiftUI `MenuBarExtra` (`.window` style), `UserNotifications`, `AppKit`
 - No `.xcodeproj` — single `swiftc` invocation in `build.sh` / `Makefile`. `Package.swift` exists for SourceKit/IDE type resolution only (not used to build)
 - Framework flags: `-framework SwiftUI -framework AppKit -framework UserNotifications`
@@ -28,8 +28,9 @@ Sources/Gheen/
   NotificationManager.swift  UNUserNotificationCenter delegate; click → NSWorkspace.open
   SettingsStore.swift     UserDefaults: repos, interval, ghPath, notifiedKeys
   CommandLog.swift        rolling ~/Library/Logs/Gheen/commands.log (last 100); serial-queue writer shared by GitHubClient + Monitor
-  MenuContentView.swift   dropdown UI (filter tabs, active / recent / error / settings / quit)
-  SettingsView.swift      add/remove repos, interval picker, gh path override
+  MenuContentView.swift   popover UI (header + gear menu, filter tabs, error banner, Running / Finished rows with hover Rerun)
+  SettingsView.swift      Settings scene: General (launch at login, notify mode, interval, gh path, activity log) + Repositories tabs
+  OnboardingView.swift    first-run Window scene: gh / sign-in checks, pick recently pushed repos
 Resources/
   Info.plist              CFBundleIdentifier=com.amree.gheen, LSUIElement=true
 Makefile                  build / run / clean / install targets

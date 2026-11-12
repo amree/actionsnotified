@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "Gheen",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS("26.0")],
     targets: [
         .executableTarget(
             name: "Gheen",

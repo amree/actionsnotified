@@ -8,10 +8,10 @@ build: $(APP)
 $(APP): $(SOURCES) Resources/Info.plist Resources/AppIcon.icns
 	@rm -rf $(APP)
 	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
-	@echo "==> Compiling (Apple Silicon, target macOS 13)"
+	@echo "==> Compiling (Apple Silicon, target macOS 26)"
 	@swiftc \
 		-swift-version 5 \
-		-target arm64-apple-macosx13.0 \
+		-target arm64-apple-macosx26.0 \
 		-O \
 		-framework SwiftUI \
 		-framework AppKit \
@@ -34,10 +34,10 @@ clean:
 install:
 	@rm -rf $(APP)
 	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
-	@echo "==> Compiling (Apple Silicon, target macOS 13)"
+	@echo "==> Compiling (Apple Silicon, target macOS 26)"
 	@swiftc \
 		-swift-version 5 \
-		-target arm64-apple-macosx13.0 \
+		-target arm64-apple-macosx26.0 \
 		-O \
 		-framework SwiftUI \
 		-framework AppKit \

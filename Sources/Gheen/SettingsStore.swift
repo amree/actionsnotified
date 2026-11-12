@@ -15,6 +15,13 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(ghPath, forKey: Keys.ghPath) }
     }
 
+    /// "all", "failures" or "never".
+    @Published var notifyMode: String {
+        didSet { defaults.set(notifyMode, forKey: Keys.notifyMode) }
+    }
+    /// Which Settings tab is showing; not persisted. Lets the popover's Fix link open Repositories.
+    @Published var settingsTab = "general"
+
     var cachedLogin: String? {
         get { defaults.string(forKey: Keys.login) }
         set { defaults.set(newValue, forKey: Keys.login) }
@@ -32,6 +39,7 @@ final class SettingsStore: ObservableObject {
         static let ghPath = "ghPath"
         static let login = "cachedLogin"
         static let notified = "notifiedKeys"
+        static let notifyMode = "notifyMode"
     }
 
     init() {
@@ -39,5 +47,6 @@ final class SettingsStore: ObservableObject {
         let stored = defaults.double(forKey: Keys.interval)
         pollInterval = stored > 0 ? stored : 30
         ghPath = defaults.string(forKey: Keys.ghPath) ?? ""
+        notifyMode = defaults.string(forKey: Keys.notifyMode) ?? "all"
     }
 }

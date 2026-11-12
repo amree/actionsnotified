@@ -14,6 +14,8 @@ final class Monitor: ObservableObject {
     @Published private(set) var errorBanner: String?
     @Published private(set) var login: String?
     @Published private(set) var lastPolledAt: Date?
+    /// Repos whose last fetch failed, with the reason. Shown as one banner in the popover.
+    @Published private(set) var repoErrors: [String: String] = [:]
 
     private let settings: SettingsStore
     private let notifier: NotificationManager
@@ -92,7 +94,12 @@ final class Monitor: ObservableObject {
 
     // MARK: - Lifecycle
 
+    /// `open Gheen.app --args -demo`: fake runs in every state, no polling, and a
+    /// preview window with the popover content. For UI checks only.
+    static let demo = ProcessInfo.processInfo.arguments.contains("-demo")
+
     func start() {
+        if Monitor.demo { loadDemo(); return }
         CommandLog.append("monitor started — \(settings.watchedRepos.count) repo(s), interval \(Int(settings.pollInterval))s")
         if login == nil { login = settings.cachedLogin }
         Task { await poll() }
@@ -111,9 +118,39 @@ final class Monitor: ObservableObject {
 
     func forgetRepo(_ repo: String) {
         repoStates.removeValue(forKey: repo)
+        repoErrors.removeValue(forKey: repo)
+    }
+
+    /// Short reason a repo can't be fetched, or nil when it's fine.
+    func repoProblem(_ repo: String) -> String? {
+        guard let msg = repoErrors[repo] else { return nil }
+        return msg.contains("404") || msg.localizedCaseInsensitiveContains("not found")
+            ? "not found or no access" : "can't be reached"
+    }
+
+    /// A setting that affects polling changed: start again at the base interval.
+    func settingsChanged() {
+        backoffMultiplier = 1.0
+        scheduleTimer()
+    }
+
+    /// Most recent run of ours seen in `repo`, for the Settings repo list.
+    func lastRunDate(for repo: String) -> Date? {
+        repoStates[repo]?.lastKnownRuns.map(\.updatedAt).max()
+    }
+
+    // Passthroughs for the first-run window.
+    func ghPath() async -> String? { await client.resolvedPath() }
+    func recentRepos() async throws -> [(name: String, pushedAt: Date?)] { try await client.recentRepos() }
+    func checkLogin() async throws -> String {
+        let resolved = try await client.currentLogin()
+        login = resolved
+        settings.cachedLogin = resolved
+        return resolved
     }
 
     func rerun(_ run: Run, failedOnly: Bool = false) {
+        if Monitor.demo { return }
         Task {
             do {
                 try await client.rerunRun(id: run.databaseId, repo: run.repo, failedOnly: failedOnly)
@@ -146,6 +183,7 @@ final class Monitor: ObservableObject {
     // MARK: - Polling
 
     func poll() async {
+        if Monitor.demo { return }
         if isPolling {
             // Normally skip an overlapping tick — but if the in-flight poll has been
             // running too long it's wedged; abandon it and fall through to a fresh
@@ -193,6 +231,7 @@ final class Monitor: ObservableObject {
             activeRuns = []
             recentRuns = []
             errorBanner = nil
+            repoErrors = [:]
             recomputeAggregate()
             return
         }
@@ -230,8 +269,19 @@ final class Monitor: ObservableObject {
             }
         }
 
-        errorBanner = repoErrors.isEmpty ? nil
-            : "Some repos failed: \(repoErrors.keys.joined(separator: ", "))"
+        // gh missing / signed out fail every repo the same way — that's one
+        // global problem, not N repo problems.
+        if let global = repoErrors.values.first(where: {
+            if case GitHubError.ghNotFound = $0 { return true }
+            if case GitHubError.notAuthenticated = $0 { return true }
+            return false
+        }) {
+            setError(global)
+            self.repoErrors = [:]
+        } else {
+            errorBanner = nil
+            self.repoErrors = repoErrors.mapValues(message(for:))
+        }
 
         processRepos(repoResults, pollStart: pollStart)
 
@@ -300,6 +350,12 @@ final class Monitor: ObservableObject {
             allFinished.append(contentsOf: finished)
         }
 
+        switch settings.notifyMode {
+        case "never":    pending = []
+        case "failures": pending = pending.filter(\.isFailure)
+        default:         break
+        }
+
         // Fire notifications — batch into one summary if multiple completed this poll.
         if pending.count == 1 {
             let n = pending[0]
@@ -321,6 +377,33 @@ final class Monitor: ObservableObject {
         activeRuns = allActive.sorted { $0.updatedAt > $1.updatedAt }
         recentRuns = Array(allFinished.sorted { $0.updatedAt > $1.updatedAt }.prefix(10))
         lastPolledAt = Date()
+        recomputeAggregate()
+    }
+
+    private func loadDemo() {
+        let now = Date()
+        func run(_ id: Int, _ status: String, _ conclusion: String?, title: String, branch: String,
+                 event: String, workflow: String, repo: String, ago: TimeInterval) -> Run {
+            var r = Run(databaseId: id, attempt: 1, status: status, conclusion: conclusion,
+                        workflowName: workflow, displayTitle: title, headBranch: branch, event: event,
+                        url: "https://github.com/\(repo)/actions", createdAt: now - ago, updatedAt: now - ago)
+            r.repo = repo
+            r.runStartedAt = now - ago
+            return r
+        }
+        login = "you"
+        activeRuns = [
+            run(1, "in_progress", nil, title: "Retry billing", branch: "feat/billing-retry", event: "pull_request", workflow: "CI", repo: "acme/api", ago: 134),
+            run(2, "waiting", nil, title: "Bump version to 2.4.1", branch: "main", event: "workflow_dispatch", workflow: "Release", repo: "acme/web", ago: 41),
+        ]
+        recentRuns = [
+            run(3, "completed", "failure", title: "Fix session timeout", branch: "fix/session-timeout", event: "pull_request", workflow: "CI", repo: "acme/api", ago: 180),
+            run(4, "completed", "success", title: "Deploy production", branch: "main", event: "push", workflow: "Deploy", repo: "acme/web", ago: 1080),
+            run(5, "completed", "success", title: "Bump deps", branch: "chore/deps-bump", event: "pull_request", workflow: "Lint", repo: "acme/infra", ago: 3600),
+            run(6, "completed", "cancelled", title: "Run e2e suite", branch: "main", event: "workflow_dispatch", workflow: "E2E", repo: "acme/web", ago: 7200),
+        ]
+        repoErrors = ["old-org/legacy": "HTTP 404: Not Found"]
+        lastPolledAt = now - 12
         recomputeAggregate()
     }
 

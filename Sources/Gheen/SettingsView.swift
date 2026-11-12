@@ -1,84 +1,96 @@
 import SwiftUI
 import AppKit
+import ServiceManagement
 
+/// The Settings window: General and Repositories tabs.
 struct SettingsView: View {
     @EnvironmentObject var settings: SettingsStore
-    @EnvironmentObject var monitor: Monitor
-    var onClose: () -> Void
-
-    // Explicit State storage, not `@State` — see MenuContentView.
-    private let newRepoState = State(initialValue: "")
-    private var newRepo: String {
-        get { newRepoState.wrappedValue }
-        nonmutating set { newRepoState.wrappedValue = newValue }
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Settings").font(.headline)
-                Spacer()
-                Button("Done") { monitor.rebuildClient(); onClose() }
+        TabView(selection: $settings.settingsTab) {
+            Tab("General", systemImage: "gearshape", value: "general") {
+                GeneralSettings()
             }
+            Tab("Repositories", systemImage: "book.closed", value: "repos") {
+                RepoSettings()
+            }
+        }
+        .frame(width: 520)
+    }
+}
 
-            Divider()
+private struct GeneralSettings: View {
+    @EnvironmentObject var settings: SettingsStore
+    @EnvironmentObject var monitor: Monitor
+    // Explicit State storage, not `@State` — see MenuContentView.
+    private let launchAtLoginState = State(initialValue: SMAppService.mainApp.status == .enabled)
+    private let ghPathState = State(initialValue: String?.none)
 
-            Text("WATCHED REPOSITORIES")
-                .font(.caption2).foregroundStyle(.secondary)
-
-            if settings.watchedRepos.isEmpty {
-                Text("None yet.").font(.caption).foregroundStyle(.secondary)
-            } else {
-                ForEach(settings.watchedRepos, id: \.self) { repo in
-                    HStack {
-                        Text(repo).font(.callout)
-                        Spacer()
-                        Button { remove(repo) } label: {
-                            Image(systemName: "trash")
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                    }
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Launch at login", isOn: Binding(
+                    get: { launchAtLoginState.wrappedValue },
+                    set: setLaunchAtLogin))
+                Picker("Notify me when", selection: $settings.notifyMode) {
+                    Text("Any run finishes").tag("all")
+                    Text("A run fails").tag("failures")
+                    Text("Never").tag("never")
                 }
             }
-
-            HStack {
-                TextField("owner/repo", text: newRepoState.projectedValue)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(add)
-                Button("Add", action: add)
-                    .disabled(!isValid(newRepo))
-            }
-
-            Divider()
-
-            HStack {
-                Text("Poll interval")
-                Spacer()
-                Picker("", selection: $settings.pollInterval) {
-                    Text("15s").tag(15.0)
-                    Text("30s").tag(30.0)
-                    Text("60s").tag(60.0)
-                    Text("2m").tag(120.0)
+            Section {
+                Picker("Check for runs every", selection: $settings.pollInterval) {
+                    Text("15 seconds").tag(15.0)
+                    Text("30 seconds").tag(30.0)
+                    Text("1 minute").tag(60.0)
+                    Text("2 minutes").tag(120.0)
                 }
-                .labelsHidden()
-                .frame(width: 80)
-                .onChange(of: settings.pollInterval) { _ in
-                    monitor.scheduleTimer()
+                .onChange(of: settings.pollInterval) { monitor.settingsChanged() }
+            } footer: {
+                Text("Slows to every 2 minutes while nothing is running.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                LabeledContent {
+                    Button("Change…", action: chooseGh)
+                } label: {
+                    Text("GitHub CLI")
+                    Text(ghPathState.wrappedValue ?? "Not found")
+                        .font(.caption.monospaced())
+                }
+                LabeledContent {
+                    Button("Open", action: openLog)
+                } label: {
+                    Text("Activity log")
+                    Text("Recent activity, for troubleshooting")
                 }
             }
+        }
+        .formStyle(.grouped)
+        .fixedSize(horizontal: false, vertical: true)
+        .task { ghPathState.wrappedValue = await monitor.ghPath() }
+    }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("gh path (optional)").font(.caption).foregroundStyle(.secondary)
-                TextField("/opt/homebrew/bin/gh", text: $settings.ghPath)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { monitor.rebuildClient() }
-            }
+    private func setLaunchAtLogin(_ on: Bool) {
+        do {
+            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+        } catch {
+            CommandLog.append("error: launch at login — \(error.localizedDescription)")
+        }
+        launchAtLoginState.wrappedValue = SMAppService.mainApp.status == .enabled
+    }
 
-            Divider()
-
-            Button("Open Command Log", action: openLog)
-                .buttonStyle(.borderless)
+    private func chooseGh() {
+        let panel = NSOpenPanel()
+        panel.message = "Choose the gh executable"
+        panel.canChooseDirectories = false
+        panel.directoryURL = URL(fileURLWithPath: "/opt/homebrew/bin")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        settings.ghPath = url.path
+        monitor.rebuildClient()
+        Task {
+            ghPathState.wrappedValue = await monitor.ghPath()
+            await monitor.poll()
         }
     }
 
@@ -91,23 +103,65 @@ struct SettingsView: View {
             NSWorkspace.shared.open(url.deletingLastPathComponent())
         }
     }
+}
 
-    private func isValid(_ s: String) -> Bool {
-        let parts = s.trimmingCharacters(in: .whitespaces).split(separator: "/")
-        return parts.count == 2 && !parts[0].isEmpty && !parts[1].isEmpty
+private struct RepoSettings: View {
+    @EnvironmentObject var settings: SettingsStore
+    @EnvironmentObject var monitor: Monitor
+    private let selectionState = State(initialValue: String?.none)
+    private let newRepoState = State(initialValue: "")
+    private var newRepo: String { newRepoState.wrappedValue }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Only runs you start are shown.")
+                .font(.callout).foregroundStyle(.secondary)
+            List(selection: selectionState.projectedValue) {
+                ForEach(settings.watchedRepos, id: \.self) { repo in
+                    HStack {
+                        Text(repo)
+                        if monitor.repoProblem(repo) != nil {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        }
+                        Spacer()
+                        detail(for: repo)
+                    }
+                }
+            }
+            .listStyle(.bordered)
+            .alternatingRowBackgrounds()
+            .frame(height: 220)
+            HStack {
+                TextField("owner/repo", text: newRepoState.projectedValue)
+                    .onSubmit(add)
+                Button("Add", action: add).disabled(!RepoSettingsValidation.isValid(newRepo))
+                Button("Remove", action: remove).disabled(selectionState.wrappedValue == nil)
+            }
+        }
+        .padding(20)
+    }
+
+    @ViewBuilder private func detail(for repo: String) -> some View {
+        if let problem = monitor.repoProblem(repo) {
+            Text(problem).font(.caption).foregroundStyle(.orange)
+        } else if let d = monitor.lastRunDate(for: repo) {
+            Text("last run \(d.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))").font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     private func add() {
         let repo = newRepo.trimmingCharacters(in: .whitespaces)
-        guard isValid(repo), !settings.watchedRepos.contains(repo) else { return }
+        guard RepoSettingsValidation.isValid(repo), !settings.watchedRepos.contains(repo) else { return }
         settings.watchedRepos.append(repo)
-        newRepo = ""
+        newRepoState.wrappedValue = ""
         Task { await monitor.poll() }
     }
 
-    private func remove(_ repo: String) {
+    private func remove() {
+        guard let repo = selectionState.wrappedValue else { return }
         settings.watchedRepos.removeAll { $0 == repo }
         monitor.forgetRepo(repo)
+        selectionState.wrappedValue = nil
         Task { await monitor.poll() }
     }
 }

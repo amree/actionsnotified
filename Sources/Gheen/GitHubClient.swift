@@ -261,6 +261,23 @@ actor GitHubClient {
         return login
     }
 
+    /// The gh binary this client will run, or nil when it can't be found.
+    func resolvedPath() async -> String? { try? await ghPath() }
+
+    /// Repos the user pushed to most recently — their own and their orgs'.
+    /// `user/repos`, not `gh repo list`: the latter only lists one owner.
+    func recentRepos() async throws -> [(name: String, pushedAt: Date?)] {
+        struct R: Decodable {
+            let fullName: String
+            let pushedAt: Date?
+            enum CodingKeys: String, CodingKey { case fullName = "full_name", pushedAt = "pushed_at" }
+        }
+        let data = try await run(["api", "user/repos?sort=pushed&per_page=8"])
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode([R].self, from: data).map { ($0.fullName, $0.pushedAt) }
+    }
+
     func rerunRun(id: Int, repo: String, failedOnly: Bool = false) async throws {
         var args = ["run", "rerun", "\(id)", "-R", repo]
         if failedOnly { args.append("--failed") }
@@ -283,6 +300,7 @@ actor GitHubClient {
         let htmlUrl: String
         let createdAt: Date
         let updatedAt: Date
+        let runStartedAt: Date?
         let triggeringActor: Actor
 
         enum CodingKeys: String, CodingKey {
@@ -293,6 +311,7 @@ actor GitHubClient {
             case htmlUrl = "html_url"
             case createdAt = "created_at"
             case updatedAt = "updated_at"
+            case runStartedAt = "run_started_at"
             case triggeringActor = "triggering_actor"
         }
     }
@@ -332,13 +351,14 @@ actor GitHubClient {
             "api", "repos/\(repo)/actions/runs", "--method", "GET",
             "-F", "per_page=100"
         ])
-        var runs = try Self.parseRuns(data, user: user).map { r in
-            Run(databaseId: r.id, attempt: r.runAttempt, status: r.status,
+        return try Self.parseRuns(data, user: user).map { r in
+            var run = Run(databaseId: r.id, attempt: r.runAttempt, status: r.status,
                 conclusion: r.conclusion, workflowName: r.name ?? "",
                 displayTitle: r.displayTitle, headBranch: r.headBranch,
                 event: r.event, url: r.htmlUrl, createdAt: r.createdAt, updatedAt: r.updatedAt)
+            run.repo = repo
+            run.runStartedAt = r.runStartedAt
+            return run
         }
-        for i in runs.indices { runs[i].repo = repo }
-        return runs
     }
 }

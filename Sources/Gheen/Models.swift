@@ -16,6 +16,8 @@ struct Run: Codable, Identifiable, Hashable, Sendable {
     let updatedAt: Date
 
     var repo: String = ""
+    /// When the current attempt started — a rerun keeps `createdAt` but resets this.
+    var runStartedAt: Date? = nil
 
     // `repo` deliberately excluded — it is set programmatically, not decoded.
     enum CodingKeys: String, CodingKey {
@@ -32,6 +34,8 @@ struct Run: Codable, Identifiable, Hashable, Sendable {
 
     var isActive: Bool { Run.activeStatuses.contains(status) }
     var isCompleted: Bool { status == "completed" }
+
+    var isWaiting: Bool { status == "waiting" || status == "queued" || status == "pending" || status == "requested" }
 
     var isFailure: Bool {
         ["failure", "timed_out", "startup_failure"].contains(conclusion ?? "")
