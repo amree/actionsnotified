@@ -5,3 +5,5 @@ ActionsNotified.app/
 
 # macOS
 .DS_Store
+ActionsNotified-*.zip
+local.mk

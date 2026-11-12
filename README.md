@@ -36,7 +36,7 @@ ActionsNotified is ad-hoc signed (not notarized), so you can't distribute it via
 # On the target Mac:
 xcode-select --install          # if not already done
 brew install gh && gh auth login
-git clone git@github.com:amree/gheen.git && cd gheen
+git clone git@github.com:amree/actionsnotified.git && cd actionsnotified
 make run
 ```
 
